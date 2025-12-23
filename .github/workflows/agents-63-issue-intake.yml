@@ -1,0 +1,193 @@
+# -----------------------------------------------------------------------------
+# Agents Issue Intake Workflow — Template Consumer Repo
+# -----------------------------------------------------------------------------
+# Handles issue intake for agent automation:
+# - agent_bridge mode: Creates branch and PR from labeled issues
+# - chatgpt_sync mode: Batch-creates issues from Issues.txt
+#
+# This workflow delegates most logic to reusable workflows in stranske/Workflows.
+#
+# Required secrets:
+# - SERVICE_BOT_PAT: PAT for bot account
+# - OWNER_PR_PAT: PAT for creating PRs with elevated permissions
+# -----------------------------------------------------------------------------
+
+name: Agents Issue Intake
+
+on:
+  issues:
+    types: [opened, labeled, reopened, unlabeled]
+  workflow_dispatch:
+    inputs:
+      intake_mode:
+        description: "Mode: agent_bridge (issue→PR) or chatgpt_sync (Issues.txt→issues)"
+        type: choice
+        options:
+          - agent_bridge
+          - chatgpt_sync
+        default: agent_bridge
+      issue_number:
+        description: "Issue number (for agent_bridge mode)"
+        type: number
+        required: false
+      source:
+        description: "Path to Issues.txt (for chatgpt_sync mode)"
+        type: string
+        default: "Issues.txt"
+      debug:
+        description: "Enable debug logging"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: agent-intake-${{ github.event.issue.number || github.event.inputs.issue_number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  # Normalize inputs for both event and workflow_dispatch triggers
+  normalize_inputs:
+    runs-on: ubuntu-latest
+    outputs:
+      intake_mode: ${{ steps.normalize.outputs.intake_mode }}
+      issue_number: ${{ steps.normalize.outputs.issue_number }}
+      source: ${{ steps.normalize.outputs.source }}
+      debug: ${{ steps.normalize.outputs.debug }}
+      bridge_agent: ${{ steps.normalize.outputs.bridge_agent }}
+    steps:
+      - name: Normalize inputs
+        id: normalize
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_MODE: ${{ github.event.inputs.intake_mode }}
+          INPUT_ISSUE: ${{ github.event.inputs.issue_number }}
+          INPUT_SOURCE: ${{ github.event.inputs.source }}
+          INPUT_DEBUG: ${{ github.event.inputs.debug }}
+          EVENT_ISSUE: ${{ github.event.issue.number }}
+        run: |
+          # Determine intake mode
+          if [ -n "$INPUT_MODE" ]; then
+            mode="$INPUT_MODE"
+          elif [ "$EVENT_NAME" = "issues" ]; then
+            mode="agent_bridge"
+          else
+            mode="agent_bridge"
+          fi
+
+          # Determine issue number
+          issue_number="${INPUT_ISSUE:-$EVENT_ISSUE}"
+
+          # Determine source file
+          source="${INPUT_SOURCE:-Issues.txt}"
+
+          # Debug flag
+          debug="${INPUT_DEBUG:-false}"
+
+          # Default agent
+          bridge_agent="codex"
+
+          # Try to detect agent from issue labels
+          if [ -n "$GITHUB_EVENT_PATH" ] && [ -f "$GITHUB_EVENT_PATH" ]; then
+            detected=$(jq -r '
+              [.issue.labels[]?.name | select(test("^agents?:[A-Za-z0-9-]+$")) | 
+               sub("^agents?:(?<key>[A-Za-z0-9-]+)$"; "\(.key)") |
+               select(. != "keepalive")][0] // empty
+            ' "$GITHUB_EVENT_PATH" 2>/dev/null || echo '')
+            if [ -n "$detected" ]; then
+              bridge_agent="$detected"
+            fi
+          fi
+
+          echo "intake_mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "issue_number=$issue_number" >> "$GITHUB_OUTPUT"
+          echo "source=$source" >> "$GITHUB_OUTPUT"
+          echo "debug=$debug" >> "$GITHUB_OUTPUT"
+          echo "bridge_agent=$bridge_agent" >> "$GITHUB_OUTPUT"
+
+  # Agent bridge: Create branch and PR from issue
+  agent_bridge:
+    needs: normalize_inputs
+    if: needs.normalize_inputs.outputs.intake_mode == 'agent_bridge' && needs.normalize_inputs.outputs.issue_number != ''
+    uses: stranske/Workflows/.github/workflows/reusable-agents-issue-bridge.yml@main
+    with:
+      agent: ${{ needs.normalize_inputs.outputs.bridge_agent }}
+      issue_number: ${{ needs.normalize_inputs.outputs.issue_number }}
+      mode: 'invite'
+      post_agent_comment: true
+      agent_pr_draft: false
+    secrets:
+      service_bot_pat: ${{ secrets.SERVICE_BOT_PAT }}
+      owner_pr_pat: ${{ secrets.OWNER_PR_PAT }}
+
+  # ChatGPT sync: Batch-create issues from Issues.txt
+  chatgpt_sync:
+    needs: normalize_inputs
+    if: needs.normalize_inputs.outputs.intake_mode == 'chatgpt_sync'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for Issues.txt
+        id: check
+        run: |
+          source="${{ needs.normalize_inputs.outputs.source }}"
+          if [ -f "$source" ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "Issues file found: $source"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Issues file not found: $source"
+          fi
+
+      - name: Parse and sync issues
+        if: steps.check.outputs.found == 'true'
+        uses: actions/github-script@v7
+        env:
+          SOURCE_FILE: ${{ needs.normalize_inputs.outputs.source }}
+        with:
+          script: |
+            const fs = require('fs');
+            const source = process.env.SOURCE_FILE;
+            
+            if (!fs.existsSync(source)) {
+              core.warning(`Source file not found: ${source}`);
+              return;
+            }
+            
+            const content = fs.readFileSync(source, 'utf8');
+            const lines = content.split('\n');
+            
+            // Parse issues from Issues.txt format
+            // Format: Lines starting with "- [ ]" or numbered items
+            const issues = [];
+            let current = null;
+            
+            for (const line of lines) {
+              const trimmed = line.trim();
+              
+              // Skip comments and empty lines
+              if (trimmed.startsWith('#') || !trimmed) continue;
+              
+              // Check for checkbox or numbered item
+              const checkboxMatch = trimmed.match(/^[-*]\s+\[[ xX]?\]\s+(.+)$/);
+              const numberedMatch = trimmed.match(/^\d+[.)]\s+(.+)$/);
+              
+              if (checkboxMatch || numberedMatch) {
+                const title = checkboxMatch ? checkboxMatch[1] : numberedMatch[1];
+                issues.push({ title: title.trim() });
+              }
+            }
+            
+            core.info(`Found ${issues.length} issues to sync`);
+            
+            // Create issues (simplified - full implementation in Workflows repo)
+            for (const issue of issues) {
+              core.info(`Would create issue: ${issue.title}`);
+            }
+            
+            core.notice(`Parsed ${issues.length} issues from ${source}. Use full intake workflow for creation.`);

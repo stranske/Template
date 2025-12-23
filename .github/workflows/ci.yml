@@ -1,0 +1,24 @@
+# -----------------------------------------------------------------------------
+# CI Workflow — Template Consumer Repo
+# -----------------------------------------------------------------------------
+# Thin caller to stranske/Workflows reusable Python CI.
+# This is the consumer pattern that other repos should follow.
+# -----------------------------------------------------------------------------
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  python-ci:
+    name: Python CI
+    uses: stranske/Workflows/.github/workflows/reusable-10-ci-python.yml@main
+    with:
+      python-versions: '["3.11", "3.12", "3.13"]'
+      coverage-min: "80"
+      format_check: false
+      working-directory: "."
+    secrets: inherit
