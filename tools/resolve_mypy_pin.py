@@ -60,11 +60,7 @@ def main() -> int:
 
     # Determine which version to output
     # If mypy has a configured version, use it; otherwise use matrix version
-    if mypy_version:
-        output_version = mypy_version
-    else:
-        # Default to the primary Python version (first in typical matrices)
-        output_version = matrix_version or "3.11"
+    output_version = mypy_version or (matrix_version or "3.11")
 
     # Write to GITHUB_OUTPUT
     github_output = os.environ.get("GITHUB_OUTPUT")
