@@ -4,6 +4,13 @@
 # This workflow runs after PRs are merged to verify that acceptance
 # criteria from linked issues were actually met. It waits for CI to
 # complete, then uses Codex to analyze the merged changes.
+#
+# Required secrets:
+# - This workflow uses `secrets: inherit` and requires any secrets
+#   documented by:
+#     stranske/Workflows/.github/workflows/reusable-agents-verifier.yml@main
+# - Ensure those repository or organization secrets are configured so
+#   the reusable workflow can authenticate and run successfully.
 
 name: Agents Verifier
 
