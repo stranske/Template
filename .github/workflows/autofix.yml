@@ -1,10 +1,14 @@
-# -----------------------------------------------------------------------------
-# Autofix Workflow — Template Consumer Repo  
-# -----------------------------------------------------------------------------
 # Thin caller for autofix - delegates to Workflows repo reusable workflow
 # Auto-fixes lint and format issues on PRs
-# -----------------------------------------------------------------------------
-
+#
+# Triggers:
+# - PR opened/synchronized/reopened
+# - PR labeled with 'autofix' or 'autofix:clean'
+#
+# Copy this file to: .github/workflows/autofix.yml
+#
+# Required secrets:
+# - SERVICE_BOT_PAT: PAT for pushing autofix commits (optional, uses GITHUB_TOKEN if not set)
 name: Autofix
 
 on:
@@ -29,6 +33,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Resolve PR context
   resolve:
     name: Resolve Context
     runs-on: ubuntu-latest
@@ -53,6 +58,7 @@ jobs:
               return;
             }
 
+            // Event validation
             const isLabeled = context.eventName === 'pull_request_target' && context.payload.action === 'labeled';
             const isPush = context.eventName === 'pull_request' && ['synchronize', 'opened', 'reopened'].includes(context.payload.action);
 
@@ -62,6 +68,7 @@ jobs:
               return;
             }
 
+            // Label validation for labeled events
             if (isLabeled) {
               const label = context.payload.label?.name?.toLowerCase();
               if (label !== 'autofix' && label !== 'autofix:clean') {
@@ -71,6 +78,7 @@ jobs:
               }
             }
 
+            // Explicitly check for null repo (deleted fork case)
             const sameRepo = pr.head.repo !== null && pr.head.repo.full_name === pr.base.repo?.full_name;
             const labels = (pr.labels || []).map(l => l.name);
 
@@ -83,6 +91,7 @@ jobs:
             core.setOutput('same_repo', sameRepo ? 'true' : 'false');
             core.setOutput('caller_actor', context.actor);
 
+  # Call reusable autofix workflow
   autofix:
     needs: resolve
     if: needs.resolve.outputs.should_run == 'true'
