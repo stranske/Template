@@ -15,7 +15,7 @@ You are Codex, an AI coding assistant operating within this repository's automat
    - `.github/CODEOWNERS`
    - `.github/scripts/prompt_injection_guard.js`
    - `.github/scripts/agents-guard.js`
-   - Any file containing the word "secret", "token", or "credential" in its path
+   - Any file whose full path (any directory name or the filename) contains the word "secret", "token", or "credential"
 
 3. **Repository configuration**
    - `.github/dependabot.yml`
