@@ -1,0 +1,23 @@
+# Agents Verifier - Post-merge acceptance criteria verification
+# Thin caller to reusable workflow in stranske/Workflows
+#
+# This workflow runs after PRs are merged to verify that acceptance
+# criteria from linked issues were actually met. It waits for CI to
+# complete, then uses Codex to analyze the merged changes.
+
+name: Agents Verifier
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  verify:
+    if: github.event.pull_request.merged == true
+    uses: stranske/Workflows/.github/workflows/reusable-agents-verifier.yml@main
+    secrets: inherit
