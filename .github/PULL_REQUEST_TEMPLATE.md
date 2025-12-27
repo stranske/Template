@@ -18,10 +18,8 @@ Brief description of the changes.
 
 ## Labels
 
-Add appropriate labels:
-- Size: `XS`, `S`, `M`, `L`, `XL`
-- Type: `bug`, `feature`, `docs`, `refactor`
-- If code fixes needed: add `autofix` label after PR is created
+Add appropriate labels according to [docs/LABELS.md](../docs/LABELS.md) (for example: `autofix`, `agent:codex`, etc.).
+- If code fixes are needed: add the `autofix` label after the PR is created.
 
 ## Related Issues
 
