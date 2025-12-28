@@ -131,7 +131,7 @@ def main() -> None:
             applied.append("forced_split")
             text = forced
 
-    def extract_enumerators(s: str) -> Tuple[list[str], list[str]]:
+    def extract_enumerators(s: str) -> tuple[list[str], list[str]]:
         # Enumerators followed by punctuation ) . : - then space
         enum_pattern = re.compile(r"(^|\s)(([0-9]{1,3}|[A-Za-z][0-9]*))[\)\.:\-](?=\s)")
         tokens: list[str] = []
