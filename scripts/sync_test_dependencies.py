@@ -109,9 +109,9 @@ TEST_FRAMEWORK_MODULES = {
     "pluggy",
 }
 
-# Project modules (installed via ``pip install -e .``)
-PROJECT_MODULES = {
-    "my_project",
+# Base project modules (installed via ``pip install -e .``)
+# Additional modules are detected dynamically from src/ directory
+_BASE_PROJECT_MODULES = {
     "analysis",
     "cli",
     "trend_analysis",
@@ -137,6 +137,53 @@ PROJECT_MODULES = {
     "health_summarize",
 }
 
+
+def _detect_local_project_modules() -> set[str]:
+    """Dynamically detect first-party modules from src/ and other common dirs.
+
+    Scans for packages (directories with __init__.py) and standalone modules
+    in standard source locations to prevent false positives on first-party imports.
+    """
+    detected: set[str] = set()
+    source_dirs = [Path("src"), Path(".")]
+
+    for source_dir in source_dirs:
+        if not source_dir.is_dir():
+            continue
+
+        for item in source_dir.iterdir():
+            # Skip hidden dirs, test dirs, common non-module dirs
+            if item.name.startswith(".") or item.name in (
+                "__pycache__",
+                "tests",
+                "test",
+                ".git",
+                "venv",
+                ".venv",
+                "node_modules",
+            ):
+                continue
+
+            # Check for packages (directories with __init__.py)
+            if item.is_dir():
+                init_file = item / "__init__.py"
+                if init_file.exists():
+                    detected.add(item.name)
+            # Check for standalone .py modules (but not in root .)
+            elif source_dir != Path(".") and item.suffix == ".py":
+                detected.add(item.stem)
+
+    return detected
+
+
+def get_project_modules() -> set[str]:
+    """Return the full set of project modules (static + dynamically detected)."""
+    return _BASE_PROJECT_MODULES | _detect_local_project_modules()
+
+
+# For backward compatibility - will be populated on first use
+PROJECT_MODULES: set[str] = set()
+
 # Module name to package name mappings for known exceptions
 MODULE_TO_PACKAGE = {
     "yaml": "PyYAML",
@@ -144,6 +191,7 @@ MODULE_TO_PACKAGE = {
     "sklearn": "scikit-learn",
     "cv2": "opencv-python",
     "pre_commit": "pre-commit",
+    "pptx": "python-pptx",
 }
 
 
@@ -248,7 +296,9 @@ def find_missing_dependencies() -> set[str]:
     declared, _ = get_declared_dependencies()
     all_imports = get_all_test_imports()
 
-    potential = all_imports - STDLIB_MODULES - TEST_FRAMEWORK_MODULES - PROJECT_MODULES
+    # Use dynamic project module detection
+    project_modules = get_project_modules()
+    potential = all_imports - STDLIB_MODULES - TEST_FRAMEWORK_MODULES - project_modules
 
     missing: set[str] = set()
     for import_name in potential:
@@ -281,9 +331,7 @@ def add_dependencies_to_pyproject(missing: set[str], fix: bool = False) -> bool:
         dev_group.multiline(True)
         optional[DEV_EXTRA] = dev_group
 
-    existing_normalised = {
-        _normalise_package_name(str(item).split("[")[0]) for item in dev_group
-    }
+    existing_normalised = {_normalise_package_name(str(item).split("[")[0]) for item in dev_group}
 
     added = False
     for package in sorted(missing):
@@ -302,9 +350,7 @@ def add_dependencies_to_pyproject(missing: set[str], fix: bool = False) -> bool:
 
 def main(argv: list[str] | None = None) -> int:
     """Main entry point."""
-    parser = argparse.ArgumentParser(
-        description="Sync test dependencies to pyproject.toml"
-    )
+    parser = argparse.ArgumentParser(description="Sync test dependencies to pyproject.toml")
     parser.add_argument(
         "--fix",
         action="store_true",
@@ -344,11 +390,5 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-if __name__ == "__main__":
-    try:
-        from trend_analysis.script_logging import setup_script_logging
-
-        setup_script_logging(module_file=__file__)
-    except ImportError:
-        pass
+if __name__ == "__main__":  # pragma: no cover - CLI entry point
     sys.exit(main())
