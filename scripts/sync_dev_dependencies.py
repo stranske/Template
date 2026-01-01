@@ -125,9 +125,7 @@ def find_project_section_end(content: str) -> int | None:
     return len(content)
 
 
-def create_dev_dependencies_section(
-    pins: dict[str, str], use_exact_pins: bool = True
-) -> str:
+def create_dev_dependencies_section(pins: dict[str, str], use_exact_pins: bool = True) -> str:
     """Create a new dev dependencies section with core tools."""
     op = "==" if use_exact_pins else ">="
     deps = []
@@ -150,17 +148,14 @@ def extract_dependencies(section: str) -> list[tuple[str, str, str]]:
     Returns list of (package_name, operator, version) tuples.
     """
     deps = []
-    # Match patterns like "package>=1.0.0", "package==1.0.0", "package",
-    # or with extras in standard PEP 508 form: "package[extra]>=1.0.0"
-    # Extras come BEFORE version specifier per PEP 508.
-    pattern = re.compile(
-        r'"([a-zA-Z0-9_-]+)(?:\[[^\]]*\])?(?:(>=|==|~=|>|<|<=|!=)([^"]+))?"'
-    )
+    # Match patterns like "package>=1.0.0" or "package==1.0.0" or just "package"
+    # Be precise: package name followed by optional version specifier
+    pattern = re.compile(r'"([a-zA-Z0-9_-]+)(?:(>=|==|~=|>|<|<=|!=)([^"\[\]]+))?(?:\[.*?\])?"')
 
     for match in pattern.finditer(section):
         package = match.group(1)
         operator = match.group(2) or ""
-        version = (match.group(3) or "").strip()
+        version = match.group(3) or ""
         deps.append((package, operator, version))
 
     return deps
@@ -181,18 +176,18 @@ def update_dependency_in_section(
     # Pattern: "package" or "package>=version" or "package[extras]>=version"
     # We need to be careful not to match "pytest" when looking at "pytest-cov"
 
-    # Match: "package" or "package[extras]>=version" per PEP 508 (extras before version)
-    # The negative lookahead (?![-\w]) ensures we don't match "pytest" in "pytest-cov"
+    # Match: "package" + optional version spec, NOT followed by more pkg name chars
+    # The negative lookahead (?!-) ensures we don't match "pytest" in "pytest-cov"
     pattern = re.compile(
-        rf'"({re.escape(package)})(?![-\w])(\[[^\]]*\])?(>=|==|~=|>|<|<=|!=)?([^"]*?)?"',
+        rf'"({re.escape(package)})(?![-\w])(>=|==|~=|>|<|<=|!=)?([^"\[\]]*)?(\[.*?\])?"',
         re.IGNORECASE,
     )
 
     def replacer(m: re.Match) -> str:
         pkg_name = m.group(1)
-        extras = m.group(2) or ""
+        extras = m.group(4) or ""
         op = "==" if use_exact_pin else ">="
-        return f'"{pkg_name}{extras}{op}{new_version}"'
+        return f'"{pkg_name}{op}{new_version}{extras}"'
 
     new_section, count = pattern.subn(replacer, section)
     return new_section, count > 0
@@ -240,20 +235,12 @@ def sync_versions(
         opt_deps_pos = find_optional_dependencies_section(content)
         if opt_deps_pos is not None:
             # Add after [project.optional-dependencies] header
-            content = (
-                content[:opt_deps_pos]
-                + "\n"
-                + new_section
-                + "\n"
-                + content[opt_deps_pos:]
-            )
+            content = content[:opt_deps_pos] + "\n" + new_section + "\n" + content[opt_deps_pos:]
         else:
             # Need to add [project.optional-dependencies] section
             insert_pos = find_project_section_end(content)
             if insert_pos is None:
-                return [], [
-                    "Could not find [project] section to add optional-dependencies"
-                ]
+                return [], ["Could not find [project] section to add optional-dependencies"]
 
             section_to_add = "\n[project.optional-dependencies]\n" + new_section + "\n"
             content = content[:insert_pos] + section_to_add + content[insert_pos:]
