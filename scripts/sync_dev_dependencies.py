@@ -14,6 +14,7 @@ Usage:
     python sync_dev_dependencies.py --apply           # Update pyproject.toml
     python sync_dev_dependencies.py --apply --create-if-missing  # Create dev deps if missing
 
+
 When applying changes, requirements.lock (if present) is synced automatically; no extra flag is required.
 """
 
