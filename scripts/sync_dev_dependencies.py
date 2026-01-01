@@ -150,17 +150,16 @@ def extract_dependencies(section: str) -> list[tuple[str, str, str]]:
     Returns list of (package_name, operator, version) tuples.
     """
     deps = []
-    # Match patterns like "package>=1.0.0", "package==1.0.0", "package",
-    # or with extras in standard PEP 508 form: "package[extra]>=1.0.0"
-    # Extras come BEFORE version specifier per PEP 508.
+    # Match patterns like "package>=1.0.0" or "package==1.0.0" or just "package"
+    # Be precise: package name followed by optional version specifier
     pattern = re.compile(
-        r'"([a-zA-Z0-9_-]+)(?:\[[^\]]*\])?(?:(>=|==|~=|>|<|<=|!=)([^"]+))?"'
+        r'"([a-zA-Z0-9_-]+)(?:(>=|==|~=|>|<|<=|!=)([^"\[\]]+))?(?:\[.*?\])?"'
     )
 
     for match in pattern.finditer(section):
         package = match.group(1)
         operator = match.group(2) or ""
-        version = (match.group(3) or "").strip()
+        version = match.group(3) or ""
         deps.append((package, operator, version))
 
     return deps
@@ -181,18 +180,18 @@ def update_dependency_in_section(
     # Pattern: "package" or "package>=version" or "package[extras]>=version"
     # We need to be careful not to match "pytest" when looking at "pytest-cov"
 
-    # Match: "package" or "package[extras]>=version" per PEP 508 (extras before version)
-    # The negative lookahead (?![-\w]) ensures we don't match "pytest" in "pytest-cov"
+    # Match: "package" + optional version spec, NOT followed by more pkg name chars
+    # The negative lookahead (?!-) ensures we don't match "pytest" in "pytest-cov"
     pattern = re.compile(
-        rf'"({re.escape(package)})(?![-\w])(\[[^\]]*\])?(>=|==|~=|>|<|<=|!=)?([^"]*?)?"',
+        rf'"({re.escape(package)})(?![-\w])(>=|==|~=|>|<|<=|!=)?([^"\[\]]*)?(\[.*?\])?"',
         re.IGNORECASE,
     )
 
     def replacer(m: re.Match) -> str:
         pkg_name = m.group(1)
-        extras = m.group(2) or ""
+        extras = m.group(4) or ""
         op = "==" if use_exact_pin else ">="
-        return f'"{pkg_name}{extras}{op}{new_version}"'
+        return f'"{pkg_name}{op}{new_version}{extras}"'
 
     new_section, count = pattern.subn(replacer, section)
     return new_section, count > 0
