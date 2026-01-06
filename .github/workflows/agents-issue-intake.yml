@@ -8,7 +8,6 @@
 # - Issue opened/reopened/labeled with agent:* labels
 # - Manual dispatch for both modes
 #
-# Copy this file to: .github/workflows/agents-issue-intake.yml
 #
 # Required secrets:
 # - SERVICE_BOT_PAT: PAT for service bot account (comments, labels)
