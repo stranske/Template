@@ -166,12 +166,13 @@ Implementation notes
 | Secret | Purpose | Alternative |
 |--------|---------|-------------|
 | `CODEX_AUTH_JSON` | ChatGPT auth for Codex CLI | Recommended |
-| `WORKFLOWS_APP_ID` | GitHub App ID | Use with APP_PRIVATE_KEY |
-| `WORKFLOWS_APP_PRIVATE_KEY` | GitHub App private key | Use with APP_ID |
+| `KEEPALIVE_APP_ID` | GitHub App ID | Use with APP_PRIVATE_KEY |
+| `KEEPALIVE_APP_PRIVATE_KEY` | GitHub App private key | Use with APP_ID |
 | `SERVICE_BOT_PAT` | Bot PAT for automation | Required |
 | `OWNER_PR_PAT` | Owner PAT for PR operations | Optional |
 
 **Note:** Choose either `CODEX_AUTH_JSON` OR the GitHub App credentials, not both.
+Legacy workflows may still reference `WORKFLOWS_APP_ID` and `WORKFLOWS_APP_PRIVATE_KEY`; keep them mirrored until workflows are updated.
 
 ### Required Environments
 
