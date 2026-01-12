@@ -8,6 +8,7 @@
  */
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const { checkRateLimitStatus, RATE_LIMIT_THRESHOLD } = require('./api-helpers');
 
 /**
  * Check if an error is transient and retryable
@@ -347,6 +348,37 @@ async function dispatchKeepaliveCommand({github, context, core, inputs}) {
   throw lastError;
 }
 
+async function resolveRateLimitFallbackClient({ github, core, secrets, threshold }) {
+  if (!github) {
+    return { client: github, usedFallback: false };
+  }
+
+  const token = secrets.AGENTS_AUTOMATION_PAT || secrets.ACTIONS_BOT_PAT || secrets.SERVICE_BOT_PAT;
+  if (!token) {
+    return { client: github, usedFallback: false };
+  }
+
+  const rateLimit = await checkRateLimitStatus(github, {
+    threshold: Number.isFinite(threshold) ? threshold : RATE_LIMIT_THRESHOLD,
+    core,
+  });
+
+  if (rateLimit.safe) {
+    return { client: github, usedFallback: false, rateLimit };
+  }
+
+  const FallbackOctokit = github.constructor;
+  if (!FallbackOctokit) {
+    core.warning('Unable to build PAT fallback client: missing Octokit constructor.');
+    return { client: github, usedFallback: false, rateLimit };
+  }
+
+  core.warning(
+    `App rate limit low (${rateLimit.remaining}/${rateLimit.limit}); using PAT fallback for keepalive dispatch.`
+  );
+  return { client: new FallbackOctokit({ auth: token }), usedFallback: true, rateLimit };
+}
+
 /**
  * Run the full keepalive orchestrator flow
  */
@@ -374,22 +406,29 @@ async function runKeepaliveOrchestrator({github, context, core, inputs, secrets}
     };
   }
 
+  const { client: activeClient } = await resolveRateLimitFallbackClient({
+    github,
+    core,
+    secrets,
+    threshold: RATE_LIMIT_THRESHOLD,
+  });
+
   // Step 2: Acquire activation lock
-  const lockResult = await acquireActivationLock({github, context, core, commentId: Number(commentId)});
+  const lockResult = await acquireActivationLock({github: activeClient, context, core, commentId: Number(commentId)});
   if (lockResult.status === 'lock-held') {
     return { ok: false, reason: 'lock-held' };
   }
 
   // Step 3: Snapshot runs
   const snapshot = await snapshotOrchestratorRuns({
-    github, context, core, 
+    github: activeClient, context, core, 
     prNumber: Number(prNumber), 
     trace
   });
 
   // Step 4: Dispatch orchestrator
   const dispatchResult = await dispatchOrchestrator({
-    github, context, core,
+    github: activeClient, context, core,
     inputs: {
       issue: Number(issue),
       prNumber: Number(prNumber),
@@ -407,7 +446,7 @@ async function runKeepaliveOrchestrator({github, context, core, inputs, secrets}
 
   // Step 5: Confirm dispatch
   const confirmResult = await confirmDispatch({
-    github, context, core,
+    github: activeClient, context, core,
     baselineIds: snapshot.ids,
     baselineTimestamp: snapshot.timestamp,
     prNumber: Number(prNumber),
@@ -421,7 +460,7 @@ async function runKeepaliveOrchestrator({github, context, core, inputs, secrets}
   // Step 6: Dispatch keepalive command
   try {
     await dispatchKeepaliveCommand({
-      github, context, core,
+      github: activeClient, context, core,
       inputs: {
         prNumber: Number(prNumber),
         base,
