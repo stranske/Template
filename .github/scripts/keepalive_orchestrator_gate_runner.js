@@ -23,6 +23,15 @@ async function runKeepaliveGate({ core, github, context, env }) {
   const summary = core.summary;
   summary.addHeading('Keepalive gate evaluation');
 
+  const hasCodexAuth = Boolean(normalise(env.CODEX_AUTH_JSON));
+  const keepaliveAppConfigured = Boolean(normalise(env.KEEPALIVE_APP_ID)) || Boolean(normalise(env.KEEPALIVE_APP_PRIVATE_KEY));
+  const workflowsAppConfigured = Boolean(normalise(env.WORKFLOWS_APP_ID)) || Boolean(normalise(env.WORKFLOWS_APP_PRIVATE_KEY));
+  const appSource = keepaliveAppConfigured ? 'KEEPALIVE_APP' : (workflowsAppConfigured ? 'WORKFLOWS_APP' : 'none');
+  const hasAppId = Boolean(normalise(env.KEEPALIVE_APP_ID || env.WORKFLOWS_APP_ID));
+  const hasAppKey = Boolean(normalise(env.KEEPALIVE_APP_PRIVATE_KEY || env.WORKFLOWS_APP_PRIVATE_KEY));
+  const appStatus = hasAppId && hasAppKey ? `ready (${appSource})` : (appSource === 'none' ? 'missing' : `partial (${appSource})`);
+  summary.addRaw(`Auth presence: CODEX_AUTH_JSON=${hasCodexAuth ? 'yes' : 'no'}, app=${appStatus}`).addEOL();
+
   const renderLine = (reason) => {
     const labelRound = round || '?';
     const labelTrace = trace || 'unknown';
