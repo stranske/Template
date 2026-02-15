@@ -990,7 +990,9 @@ def _invoke_llm(
     try:
         from langchain_core.messages import HumanMessage
     except ModuleNotFoundError:
-        HumanMessage = None  # type: ignore[assignment]
+        human_message_cls = None
+    else:
+        human_message_cls = HumanMessage
 
     config = _build_llm_config(
         operation=operation,
@@ -998,8 +1000,8 @@ def _invoke_llm(
         issue_number=issue_number,
     )
 
-    if HumanMessage is not None:
-        messages: list[Any] = [HumanMessage(content=prompt)]
+    if human_message_cls is not None:
+        messages: list[Any] = [human_message_cls(content=prompt)]
         try:
             response = client.invoke(messages, config=config)
         except TypeError as exc:
