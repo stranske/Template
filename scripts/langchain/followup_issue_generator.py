@@ -988,11 +988,11 @@ def _invoke_llm(
 ) -> str:
     """Invoke LLM and return response text."""
     try:
-        from langchain_core.messages import HumanMessage
+        import langchain_core.messages as lc_messages
     except ModuleNotFoundError:
         human_message_cls = None
     else:
-        human_message_cls = HumanMessage
+        human_message_cls = lc_messages.HumanMessage
 
     config = _build_llm_config(
         operation=operation,
