@@ -988,9 +988,11 @@ def _invoke_llm(
 ) -> str:
     """Invoke LLM and return response text."""
     try:
-        from langchain_core import messages as lc_messages
+        from langchain_core.messages import HumanMessage
     except ModuleNotFoundError:
-        lc_messages = None
+        human_message_cls = None
+    else:
+        human_message_cls = HumanMessage
 
     config = _build_llm_config(
         operation=operation,
@@ -998,8 +1000,37 @@ def _invoke_llm(
         issue_number=issue_number,
     )
 
-    if lc_messages is not None:
-        messages: list[Any] = [lc_messages.HumanMessage(content=prompt)]
+    def normalize_response_content(response: Any) -> str:
+        content = getattr(response, "content", None)
+        if content is None:
+            return str(response)
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                if isinstance(item, str):
+                    parts.append(item)
+                elif isinstance(item, dict):
+                    text_value = item.get("text")
+                    if isinstance(text_value, str):
+                        parts.append(text_value)
+                        continue
+                    content_value = item.get("content")
+                    if isinstance(content_value, str):
+                        parts.append(content_value)
+                        continue
+                    parts.append(json.dumps(item, ensure_ascii=False, sort_keys=True))
+                else:
+                    parts.append(str(item))
+            combined = "".join(parts).strip()
+            return combined or str(content)
+        if isinstance(content, dict):
+            return json.dumps(content, ensure_ascii=False, sort_keys=True)
+        return str(content)
+
+    if human_message_cls is not None:
+        messages: list[Any] = [human_message_cls(content=prompt)]
         try:
             response = client.invoke(messages, config=config)
         except TypeError as exc:
@@ -1008,7 +1039,7 @@ def _invoke_llm(
                 exc,
             )
             response = client.invoke(messages)
-        return response.content
+        return normalize_response_content(response)
 
     # langchain_core isn't available. Prefer non-message invoke signatures first.
     try:
@@ -1025,7 +1056,7 @@ def _invoke_llm(
                 "Unable to invoke client without langchain_core installed. "
                 "Install langchain-core or provide a client that accepts plain string prompts."
             ) from inner_exc
-    return response.content
+    return normalize_response_content(response)
 
 
 def _extract_json(text: str) -> dict[str, Any]:
