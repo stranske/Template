@@ -29,6 +29,7 @@ dev = [
     "pytest-cov>=7.0.0",
     "ruff>=0.15.0",
     "mypy>=1.19.1",
+    "black==26.1.0",
 ]
 
 [project.urls]
@@ -97,3 +98,7 @@ show_error_codes = true
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
