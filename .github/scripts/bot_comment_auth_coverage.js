@@ -39,6 +39,7 @@ function normalizeRecordBoolean(value) {
   const text = cleanString(value).toLowerCase();
   if (['1', 'true', 'yes', 'y', 'on'].includes(text)) return true;
   if (['0', 'false', 'no', 'n', 'off', ''].includes(text)) return false;
+  if (typeof value === 'string') return false;
   return Boolean(value);
 }
 
@@ -141,25 +142,43 @@ function parseCsvList(value) {
     .filter(Boolean);
 }
 
+function firstConfiguredValue(options, keys, envName) {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(options, key)) {
+      return { value: options[key], configured: true };
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(process.env, envName)) {
+    return { value: process.env[envName], configured: true };
+  }
+  return { value: undefined, configured: false };
+}
+
 function summarizeOrganicEvidence(records = [], options = {}) {
-  const requiredEvents = parseCsvList(
-    options.required_organic_events ??
-      options.requiredOrganicEvents ??
-      process.env.BOT_COMMENT_AUTH_REQUIRED_ORGANIC_EVENTS
+  const requiredEventsConfig = firstConfiguredValue(
+    options,
+    ['required_organic_events', 'requiredOrganicEvents'],
+    'BOT_COMMENT_AUTH_REQUIRED_ORGANIC_EVENTS'
   );
-  const requiredComponents = parseCsvList(
-    options.organic_components ??
-      options.organicComponents ??
-      process.env.BOT_COMMENT_AUTH_ORGANIC_COMPONENTS
+  const organicComponentsConfig = firstConfiguredValue(
+    options,
+    ['organic_components', 'organicComponents'],
+    'BOT_COMMENT_AUTH_ORGANIC_COMPONENTS'
   );
+  const requiredEvents = parseCsvList(requiredEventsConfig.value);
+  const requiredComponents = parseCsvList(organicComponentsConfig.value);
   const expectedMode = normalizeAuthMode(
     options.organic_expected_mode ??
       options.organicExpectedMode ??
       process.env.BOT_COMMENT_AUTH_ORGANIC_EXPECTED_MODE
   );
-  const components = requiredComponents.length > 0
-    ? requiredComponents
-    : Object.keys(COMPONENT_POLICIES);
+  const organicChecksDisabled = requiredEvents.length === 0 ||
+    (organicComponentsConfig.configured && requiredComponents.length === 0);
+  const components = organicChecksDisabled
+    ? []
+    : requiredComponents.length > 0
+      ? requiredComponents
+      : Object.keys(COMPONENT_POLICIES);
   const eventCounts = Object.create(null);
   const latestByComponentEvent = Object.create(null);
 
@@ -171,7 +190,7 @@ function summarizeOrganicEvidence(records = [], options = {}) {
       expected_mode: expectedMode === 'unknown' ? '' : expectedMode,
       event_counts: eventCounts,
       blockers: [],
-      status: 'no-data',
+      status: organicChecksDisabled ? 'pass' : 'no-data',
     };
   }
 
@@ -195,8 +214,11 @@ function summarizeOrganicEvidence(records = [], options = {}) {
         blockers.push(`missing-organic-${component}-${eventName}`);
         continue;
       }
-      if (latest.fallback_warning_active || latest.auth_mode === 'legacy-app-id') {
-        blockers.push(`legacy-organic-${component}-${eventName}`);
+      if (latest.fallback_warning_active) {
+        blockers.push(`legacy-organic-${component}-${eventName}-fallback-active`);
+      }
+      if (latest.auth_mode === 'legacy-app-id') {
+        blockers.push(`legacy-organic-${component}-${eventName}-auth-mode`);
       }
       if (expectedMode !== 'unknown' && latest.auth_mode !== expectedMode) {
         blockers.push(`expected-${expectedMode}-organic-${component}-${eventName}`);
@@ -369,8 +391,11 @@ function summarizeBotCommentAuthCoverage(records = [], options = {}) {
       if (!componentPolicyConfig.allowed_modes.includes(latest.auth_mode)) {
         blockers.push(`disallowed-${component}-auth-mode`);
       }
-      if (latest.fallback_warning_active || latest.auth_mode === 'legacy-app-id') {
+      if (latest.fallback_warning_active) {
         blockers.push(`legacy-${component}-fallback-active`);
+      }
+      if (latest.auth_mode === 'legacy-app-id') {
+        blockers.push(`legacy-${component}-auth-mode`);
       }
       if (
         componentPolicyConfig.expected_mode &&
@@ -455,6 +480,7 @@ function formatBotCommentAuthCoverageMarkdown(report) {
   ];
 
   if (report.artifact_selection) {
+    lines.push(`- Artifact selection status: ${report.artifact_selection.status || 'unknown'}`);
     lines.push(`- Selected auth artifacts: ${report.artifact_selection.selected_auth_artifact_count}`);
     if (report.artifact_selection.error_message) {
       lines.push(`- Artifact selector error: ${report.artifact_selection.error_message}`);
@@ -509,15 +535,11 @@ function isPotentialAuthCoverageFile(file) {
   const normalized = cleanString(file).split(path.sep).join('/');
   const basename = path.basename(normalized);
   if (!normalized.endsWith('.json')) return false;
-  const segments = normalized.split('/');
-  const hasWrapperArtifactDir = segments.some((segment) =>
-    segment.startsWith('bot-comment-auth-coverage-wrapper-')
+  const artifactDir = path.basename(path.dirname(normalized));
+  return (
+    (basename === 'wrapper.json' && artifactDir.startsWith('bot-comment-auth-coverage-wrapper-')) ||
+    (basename === 'reusable.json' && artifactDir.startsWith('bot-comment-auth-coverage-reusable-'))
   );
-  const hasReusableArtifactDir = segments.some((segment) =>
-    segment.startsWith('bot-comment-auth-coverage-reusable-')
-  );
-  return (basename === 'wrapper.json' && hasWrapperArtifactDir) ||
-    (basename === 'reusable.json' && hasReusableArtifactDir);
 }
 
 function readJsonRecords(files = []) {
