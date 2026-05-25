@@ -8,3 +8,9 @@ codex-prompt.md
 codex-output.md
 verifier-context.md
 autofix_report_enriched.json
+
+# Python bytecode
+__pycache__/
+*.pyc
+scripts/__pycache__/
+scripts/**/__pycache__/
