@@ -38,7 +38,7 @@ pluggy==1.6.0
     #   pytest-cov
 pygments==2.19.2
     # via pytest
-pytest==9.1.0
+pytest==9.1.1
     # via
     #   my-project (pyproject.toml)
     #   pytest-cov
