@@ -14,7 +14,7 @@ coverage==7.15.2
     # via pytest-cov
 iniconfig==2.3.0
     # via pytest
-librt==0.12.0 ; platform_python_implementation != 'PyPy'
+librt==0.13.0 ; platform_python_implementation != 'PyPy'
     # via mypy
 mypy==2.3.0
     # via my-project (pyproject.toml)
