@@ -6,7 +6,7 @@ black==26.5.1
     # via my-project (pyproject.toml)
 click==8.3.1
     # via black
-coverage==7.15.2
+coverage==7.15.3
     # via pytest-cov
 iniconfig==2.3.0
     # via pytest
