@@ -21,7 +21,12 @@ def test_generated_dirs_untracked_and_vendored_preserved() -> None:
     assert root_modules.returncode == 0
     assert not root_modules.stdout.strip(), "root node_modules must not be tracked"
 
-    vendored_modules = _git("ls-files", ".github/scripts/node_modules")
+    vendored_modules = _git(
+        "ls-files",
+        "--error-unmatch",
+        "--",
+        ".github/scripts/node_modules/minimatch/package.json",
+    )
     assert vendored_modules.returncode == 0
     assert vendored_modules.stdout.strip(), "vendored minimatch tree must remain tracked"
 
