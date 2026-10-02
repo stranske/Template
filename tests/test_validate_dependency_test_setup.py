@@ -42,10 +42,46 @@ def test_numeric_assertion_is_not_a_dependency_version(tmp_path: Path) -> None:
 def test_missing_declared_dependency_fails(tmp_path: Path) -> None:
     root = scaffold_copy(tmp_path)
     lock = root / "requirements.lock"
-    lock.write_text(lock.read_text().replace("ruff==0.16.9", ""))
+    lock.write_text(
+        "".join(
+            line
+            for line in lock.read_text().splitlines(keepends=True)
+            if not line.startswith("ruff==")
+        )
+    )
     result = run_validator(root)
     assert result.returncode == 1
     assert "dev: ruff is missing" in result.stderr
+
+
+def test_direct_reference_with_extra_is_in_lock(tmp_path: Path) -> None:
+    root = scaffold_copy(tmp_path)
+    pyproject = root / "pyproject.toml"
+    pyproject.write_text(
+        pyproject.read_text().replace(
+            "dev = [", 'dev = [\n    "demo[feature] @ https://example.invalid/demo.whl",', 1
+        )
+    )
+    lock = root / "requirements.lock"
+    lock.write_text(lock.read_text() + "\ndemo[feature] @ https://example.invalid/demo.whl\n")
+    result = run_validator(root)
+    assert result.returncode == 0, result.stderr
+
+
+def test_no_optional_groups_need_no_lock(tmp_path: Path) -> None:
+    root = scaffold_copy(tmp_path)
+    (root / "pyproject.toml").write_text('[project]\nname = "demo"\n')
+    (root / "requirements.lock").unlink()
+    result = run_validator(root)
+    assert result.returncode == 0, result.stderr
+
+
+def test_optional_groups_need_lock(tmp_path: Path) -> None:
+    root = scaffold_copy(tmp_path)
+    (root / "requirements.lock").unlink()
+    result = run_validator(root)
+    assert result.returncode == 1
+    assert "requirements.lock is missing" in result.stderr
 
 
 def test_no_product_specific_probe_in_shipped_validator() -> None:

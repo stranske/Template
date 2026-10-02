@@ -10,7 +10,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_NAME = re.compile(r"^([A-Za-z0-9][A-Za-z0-9_.-]*)")
-LOCKED_PACKAGE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9_.-]*)==", re.MULTILINE)
+LOCKED_PACKAGE = re.compile(
+    r"^([A-Za-z0-9][A-Za-z0-9_.-]*)(?:\[[^\]]+\])?\s*(?:==|@)", re.MULTILINE
+)
 
 
 def normalized_name(requirement: str) -> str:
