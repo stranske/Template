@@ -53,6 +53,7 @@ RUNNER_JS = textwrap.dedent("""
       const warnings = [];
       const summaryCalls = [];
       const summaryRaw = [];
+      const statusCalls = [];
       const summaryStub = {
         addHeading() { return summaryStub; },
         addRaw(text) { summaryRaw.push(String(text)); return summaryStub; },
@@ -61,7 +62,10 @@ RUNNER_JS = textwrap.dedent("""
       const githubStub = {
         rest: {
           repos: {
-            createCommitStatus: async () => { if (error) throw error; },
+            createCommitStatus: async (params) => {
+              statusCalls.push(params);
+              if (error) throw error;
+            },
           },
         },
       };
@@ -102,7 +106,7 @@ RUNNER_JS = textwrap.dedent("""
       } catch (e) {
         threw = { status: e.status === undefined ? null : e.status, message: String(e.message) };
       }
-      return { warnings, summaryWrites: summaryCalls.length, summaryRaw, threw };
+      return { warnings, statusCalls, summaryWrites: summaryCalls.length, summaryRaw, threw };
     }
 
     const FORK = {
@@ -277,3 +281,15 @@ def test_successful_status_write_is_silent(outcomes: dict[str, Any]) -> None:
     assert case["warnings"] == []
     assert case["summaryWrites"] == 0
     assert case["summaryRaw"] == []
+
+    assert case["statusCalls"] == [
+        {
+            "owner": "stranske",
+            "repo": "Template",
+            "sha": "headsha",
+            "state": "success",
+            "context": "Gate / gate",
+            "description": "all checks passed",
+            "target_url": "https://example.invalid/run",
+        }
+    ]
