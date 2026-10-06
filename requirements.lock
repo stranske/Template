@@ -2,7 +2,7 @@
 #    uv pip compile pyproject.toml --extra=dev --universal --output-file=requirements.lock
 ast-serialize==0.6.0
     # via mypy
-black==26.5.1
+black==26.10.0
     # via my-project (pyproject.toml)
 click==8.4.2
     # via black
@@ -10,13 +10,13 @@ colorama==0.4.6 ; sys_platform == 'win32'
     # via
     #   click
     #   pytest
-coverage==7.16.1
+coverage==7.16.2
     # via pytest-cov
 iniconfig==2.3.0
     # via pytest
 librt==0.13.0 ; platform_python_implementation != 'PyPy'
     # via mypy
-mypy==2.3.1
+mypy==2.4.0
     # via my-project (pyproject.toml)
 mypy-extensions==1.1.0
     # via
@@ -48,7 +48,7 @@ pytokens==0.4.1
     # via black
 pyyaml==6.0.3
     # via my-project (pyproject.toml)
-ruff==0.16.9
+ruff==0.16.10
     # via my-project (pyproject.toml)
 typing-extensions==4.16.0
     # via mypy
