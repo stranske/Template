@@ -72,6 +72,8 @@ RUNNER_JS = textwrap.dedent("""
       const sandbox = {
         process: {
           env: {
+            // Model the upstream resolve-pr job; these cases isolate status writes.
+            RESOLVER_RESULT: 'success',
             STATE: state,
             DESCRIPTION: 'all checks passed',
             TARGET_URL: 'https://example.invalid/run',
